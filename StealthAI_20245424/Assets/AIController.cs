@@ -10,7 +10,7 @@ public class AIController : MonoBehaviour
     // Target the AI will detect and chase whatever has the label "Player"
     [SerializeField] GameObject target;
 
-    // Transform that represents the vision of the AI
+    // The vision of the AI
     [SerializeField] GameObject eyeArea;
 
     // Vision configuration
@@ -23,7 +23,21 @@ public class AIController : MonoBehaviour
     [SerializeField] float hearingDistance = 5f;
 
     // Last position where the AI saw the target
-    Transform lastKnowTargetPos;
+    Vector3 lastKnownTargetPos;
+    bool hasLastKnownPosition = false;
+
+    // How long the AI will search the last known position before giving up
+    [SerializeField] float investigateDuration = 5f;
+
+    // Timer for how long the AI has been investigating
+    float investigateTimer = 0f;
+
+    // how close before it counts to arrive at investigation point
+    [SerializeField] float investigateArrivalThreshold = 1.0f;
+
+    // How close is "caught"
+    [SerializeField] float catchDistance = 1.5f;
+
 
     // Pathfinding component used to move on the NavMesh
     NavMeshAgent agent;
@@ -41,8 +55,10 @@ public class AIController : MonoBehaviour
     // time to wait at each point
     [SerializeField] float waitTimeSec = 2f;
     // accumulated wait time at current point
-    [SerializeField] float timeSpentAtPoint = 0f;     
+    [SerializeField] float timeSpentAtPoint = 0f;
 
+
+    
 
     void Start()
     {
@@ -80,11 +96,11 @@ public class AIController : MonoBehaviour
                 break;
 
             case AIStates.INVESTIGATE:
-                //HandleInvestigate();
+                HandleInvestigate();
                 break;
 
             case AIStates.CHASE:
-                //HandleChase();
+                HandleChase();
                 break;
         }
     }
@@ -155,8 +171,99 @@ public class AIController : MonoBehaviour
         }
     }
 
+    private void HandleChase()
+    {
+        // if agent doesnt exist or we have no target, skip
+        if (agent == null)
+            return;
 
-    
+        if (target == null)
+        {
+            state = AIStates.PATROL;
+            return;
+        }
+
+        // Does the AI have line of sight to the target
+        GameObject visible = HasLineOfSight(target);
+
+        if (visible != null && visible.CompareTag("Player"))
+        {
+            // Still see the player -> keep chasing, update last known pos
+            lastKnownTargetPos = target.transform.position;
+            hasLastKnownPosition = true;
+
+            agent.SetDestination(target.transform.position);
+
+            // Check for "caught"
+            float distanceToTarget = Vector3.Distance(transform.position, target.transform.position);
+            if (distanceToTarget <= catchDistance)
+            {
+                Debug.Log($"{name}: Caught the player!");
+                // TODO: trigger game over / restart here
+                state = AIStates.PATROL;
+                target = null;
+                hasLastKnownPosition = false;
+            }
+        }
+        else
+        {
+            // Lost line of sight change state to INVESTIGATE if we have a last known position
+            if (hasLastKnownPosition)
+            {
+                state = AIStates.INVESTIGATE;
+                investigateTimer = 0f;
+                agent.SetDestination(lastKnownTargetPos);
+            }
+            else
+            {
+                // if there is no last known position, go back to PATROL
+                state = AIStates.PATROL;
+                target = null;
+            }
+        }
+    }
+
+
+    private void HandleInvestigate()
+    {
+        // this method makes the AI go to the last known position of the target
+        if (agent == null)
+            return;
+
+        if (!hasLastKnownPosition)
+        {
+            // Nothing to investigate
+            state = AIStates.PATROL;
+            return;
+        }
+
+        float dist = Vector3.Distance(transform.position, lastKnownTargetPos);
+
+        // Go to the last known position of the target
+        if (dist > investigateArrivalThreshold)
+        {
+            // keep heading to the last known position
+            agent.SetDestination(lastKnownTargetPos);
+
+            // dont count time until we arrive
+            investigateTimer = 0f;
+            return;
+        }
+
+        // at the last known position, stand and wait
+        investigateTimer += Time.deltaTime;
+
+        if (investigateTimer >= investigateDuration)
+        {
+            //After wait timer give up and go back to PATROL
+            hasLastKnownPosition = false;
+            target = null;
+            state = AIStates.PATROL;
+        }
+    }
+
+
+
     private void ScanTarget()
     {
         // Run all sensing logic (vision now, hearing later)
@@ -196,11 +303,18 @@ public class AIController : MonoBehaviour
                 if (potentialTarget != null && potentialTarget.CompareTag("Player"))
                 {
                     target = potentialTarget.transform.root.gameObject;
-                    lastKnowTargetPos = potentialTarget.transform;
+
+                    // store a snapshot of where we saw the player
+                    lastKnownTargetPos = potentialTarget.transform.position;
+                    hasLastKnownPosition = true;
+
+                    // always go into chase when we see the player
                     state = AIStates.CHASE;
+
                     // no need to check any further colliders this frame
-                    return; 
+                    return;
                 }
+
             }
         }
     }
