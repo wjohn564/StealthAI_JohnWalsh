@@ -42,7 +42,7 @@ public class AIController : MonoBehaviour
     // Pathfinding component used to move on the NavMesh
     NavMeshAgent agent;
 
-    // World-space label to show the current AI state (optional)
+    // World-space label to show the current AI state
     [SerializeField] TMPro.TextMeshPro textMeshPro;
 
     // Current state of the AI (see AIStates enum below)
@@ -124,11 +124,13 @@ public class AIController : MonoBehaviour
         textMeshPro.SetText(stateStr);
 
         // Make the label face the camera so it is easy to read
-        if (Camera.main != null)
-        {
-            Transform t = textMeshPro.transform;
-            t.LookAt(Camera.main.transform);
-        }
+        //if (Camera.main != null)
+        //{
+        //    Transform t = textMeshPro.transform;
+        //    t.LookAt(Camera.main.transform);
+        //}
+
+
     }
 
 
