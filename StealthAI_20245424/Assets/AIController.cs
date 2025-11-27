@@ -4,6 +4,7 @@ using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.UIElements.Experimental;
+using UnityEngine.SceneManagement;
 
 public class AIController : MonoBehaviour
 {
@@ -35,7 +36,7 @@ public class AIController : MonoBehaviour
     // how close before it counts to arrive at investigation point
     [SerializeField] float investigateArrivalThreshold = 1.0f;
 
-    // How close is "caught"
+    // How close is caught
     [SerializeField] float catchDistance = 1.5f;
 
 
@@ -201,10 +202,9 @@ public class AIController : MonoBehaviour
             if (distanceToTarget <= catchDistance)
             {
                 Debug.Log($"{name}: Caught the player!");
-                // TODO: trigger game over / restart here
-                state = AIStates.PATROL;
-                target = null;
-                hasLastKnownPosition = false;
+                // restart game.
+                Scene currentScene = SceneManager.GetActiveScene();
+                SceneManager.LoadScene(currentScene.buildIndex);
             }
         }
         else
@@ -270,10 +270,10 @@ public class AIController : MonoBehaviour
     {
         // Run all sensing logic (vision now, hearing later)
         LookForTarget();
-        // ListenForTarget(); // not implemented yet
+        // hearing is weaker than vision
+        ListenForTarget();
+
     }
-
-
     
     private void LookForTarget()
     {
@@ -360,7 +360,30 @@ public class AIController : MonoBehaviour
 
     private void ListenForTarget()
     {
-        // pass for now
+        if (target == null || agent == null)
+            return;
+
+        // If we are already chasing hearing does nothing
+        if (state == AIStates.CHASE)
+            return;
+
+        float distToPlayer = Vector3.Distance(transform.position, target.transform.position);
+
+        // Only react if the player is within the hearing radius
+        if (distToPlayer <= hearingDistance)
+        {
+            // Store the last heard position
+            lastKnownTargetPos = target.transform.position;
+            hasLastKnownPosition = true;
+
+            // If we are patrolling, go investigate the noise
+            if (state == AIStates.PATROL || state == AIStates.INVESTIGATE)
+            {
+                state = AIStates.INVESTIGATE;
+                investigateTimer = 0f;
+                agent.SetDestination(lastKnownTargetPos);
+            }
+        }
     }
 
 
